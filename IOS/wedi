@@ -1,0 +1,325 @@
+#!/bin/sh
+
+POSIXLY_CORRECT=yes
+
+
+# kontrola zda je WEDI_RC nastaveno
+if [ -z "$WEDI_RC" ]; then
+	echo "WEDI_RC neni nastavena" >&2;
+	exit 1
+fi
+
+#pokud je WEDI_RC nastaveno, ale path neexistuje
+if [ -d "$WEDI_RC" ]; then
+	touch "$WEDI_RC";
+	wedirc=`realpath "$WEDI_RC"`;
+else
+	mkdir -p "$(dirname "$WEDI_RC")";
+	touch "$WEDI_RC";
+	wedirc=`realpath "$WEDI_RC"`;
+fi
+
+# nastaveni editoru
+if [ -z "$EDITOR" ]; then # pokud EDITOR neni nastavena, zkontroluje se promenna VISUAL
+	if [ -z "$VISUAL" ]; then # pokud ani VISUAL neni nastaveno, pouzije se vi
+		EDITOR="vi";
+	else
+		EDITOR="$VISUAL"; # pokud je visual nastaveno pouzije se prirazenim do EDITOR
+	fi
+else
+	: # pokud je EDITOR nastaven bude pouzit
+fi
+
+# kontrola zda je utilita realpath dostupna
+RPEXIST=`command -v realpath`;
+if [ -z "$RPEXIST" ]; then
+	echo "Utilita realpath neni dostupna" >&2;
+	exit 1;
+fi
+
+if [ $# -eq 0 ]; then # zde jsou pripady kdyz nejsou zadany zadne argumenty
+	
+	DIRECT0=`realpath ./`; # zjistim soucasnou slozku
+	LEDIT0=`grep -o -P "$DIRECT0.[^/]*(?=\|[0-9]{4})" "$wedirc" | tail -1`; # zjistim posledni editovany soubor
+	
+	if [ -z "$LEDIT0" ]; then
+		echo "V soucasnem adresari doposud zadny soubor editovan nebyl" >&2;
+		exit 1;
+	
+	else
+		printf "%s" "$LEDIT0" >> "$wedirc"; # zapis abs cesty do log souboru
+		printf "%s" "|" >> "$wedirc"; # oddelovac cesty a data
+		DATE=`date +%Y-%m-%d`; # zformatovani data do pozadovaneho formatu
+		echo "$DATE" >> "$wedirc"; # zapis data do logfilu
+		"$EDITOR" "$LEDIT0"; # edituju posledni editovany soubor
+		exit 0;
+	fi	
+
+
+elif [ $# -eq 1 ]; then # zde jsou pripady kdy je zadan jeden argument
+
+	if [ -f "$1" ] && [ "$1" != "-m" ] && [ "$1" != "-l" ]; then # pokud bude wedi zadan soubor bude edtiovan
+		
+		FILE1=`realpath "$1"`; # realpath zjisti abs cestu k souboru
+		printf "%s" "$FILE1" >> "$wedirc"; # zapis abs cesty do log souboru
+		printf "%s" "|" >> "$wedirc"; # oddelovac cesty a data
+		DATE=`date +%Y-%m-%d`; # zformatovani data do pozadovaneho formatu
+		echo "$DATE" >> "$wedirc"; # zapis data do logfilu
+		"$EDITOR" "$FILE1"; # editace souboru
+		exit 0;
+
+	elif [ -d "$1" ] && [ "$1" != "-m" ] && [ "$1" != "-l" ]; then # kdyz je wedi spusten "se slozkou"
+	
+		DIRECT1=`realpath "$1"`; # zjistim realpath cilove slozky
+		LEDIT1=`grep -o -P "$DIRECT1.[^/]*(?=\|[0-9]{4})" "$wedirc" | tail -1`; # zjistim posledni editovany soubor
+						
+		if [ -z "$LEDIT1" ]; then
+			echo "V cilovem adresari doposud zadny soubor editovan nebyl" >&2;
+			exit 1;
+		else
+			LEDEDIT1=`realpath "$LEDIT1"`; #zjisim rp k LEDIT1
+			printf "%s" "$LEDEDIT1" >> "$wedirc"; # zapis abs cesty do souboru
+			printf "%s" "|" >> "$wedirc"; # oddelovac cesty a data
+			DATE=`date +%Y-%m-%d`; # zformatovani data do pozadovaneho formatu
+			echo "$DATE" >> "$wedirc"; # zapis data do logfilu
+			"$EDITOR" "$LEDEDIT1"; # editace posledniho edit souboru
+			exit 0;
+		fi
+			
+	elif [ "$1" = "-m" ]; then
+		
+		MOST=`realpath ./`; # zjistim pwd
+		MOSTT=`grep -o -P "$MOST.[^/]*(?=\|[0-9]{4})" "$wedirc" | cut -d "|" -f 1 | grep -o "[^/]*$" | sort | uniq -c | sort -rn | head -n 1 | grep -o -P "[^ ]*$"`; # zjistim nejcasteji editovany soubor
+		
+		if [ -z "$MOSTT" ]; then
+			echo "V soucasnem adresari doposud zadne soubory editovany nebyly" >&2;
+			exit 1;
+		
+		else
+			MOMO="$MOST""/""$MOSTT"
+			printf "%s" "$MOMO" >> "$wedirc"; # zapis abs cesty do souboru
+			printf "%s" "|" >> "$wedirc"; # oddelovac cesty a data
+			DATE=`date +%Y-%m-%d`; # zformatovani data do pozadovaneho formatu
+			echo "$DATE" >> "$wedirc"; # zapis data do logfilu
+			"$EDITOR" "$MOMO"; # editace nejcasteji editovaneho souboru
+			exit 0;
+		fi
+	elif [ "$1" = "-l" ]; then
+		
+		CURRDIR=`realpath ./`; # zjistim pwd
+		CURRDIREDITED=`grep -o -P "$CURRDIR.[^/]*(?=\|[0-9]{4})" "$wedirc" | sort | uniq | grep -o "[^/]*$"`; # zjistim vsechny editovane soubory v soucasne slozce
+
+			if [ -z "$CURRDIREDITED" ]; then
+				echo "Zadne soubory v soucasne slozce jeste nebyly editovany" >&2;
+				exit 1;
+			else 
+				echo "$CURRDIREDITED"; # vypis editovanych souboru, pouze jejich nazvy, v zadani neni specifikace jestli se ma vypsat realpath nebo pouze jejich nazev
+				exit 0;
+			fi
+	else
+		echo "Ooops. Something went wrong. Sorry. You should Read The Fancy Manual" >&2; # nejaka chyba pokud podminky nebyly splneny
+		exit 1;
+	fi
+elif [ $# -eq 2 ]; then
+	
+	if [ "$1" = "-m" ]; then
+	
+		if [ -d "$2" ]; then
+			
+			PWMD=`realpath "$2"`; # zjistim realpath cilove slozky
+			MOSTED=`grep -o -P "$PWMD.[^/]*(?=\|[0-9]{4})" "$wedirc" | cut -d "|" -f 1 | grep -o "[^/]*$" | sort | uniq -c | sort -rn | head -n 1 | grep -o -P "[^ ]*$"`;
+			
+			if [ -z "$MOSTED" ]; then # pokud nebyl v cilove slozce editovan soubor tak program skonci s chybovym hlaseni
+				echo "V cilovem adresari jeste nebyl editovan zadny soubor" >&2;
+				exit 1;			
+			else
+				RPMOSTED="$PWMD""/""$MOSTED"
+				printf "%s" "$RPMOSTED" >> "$wedirc"; # zapis abs path do logfilu
+				printf "%s" "|" >> "$wedirc"; # oddelovac cesty a data
+				DATE=`date +%Y-%m-%d`; # zformatovani casu do pozadovaneho formatu
+				echo "$DATE" >> "$wedirc"; # zapis data do logfilu
+				"$EDITOR" "$RPMOSTED"; # editace pomoci wedi
+				exit 0;	
+			fi
+		else
+			echo "Druhy argument neni slozka" >&2;
+			exit 1;
+		fi
+
+	elif [ "$1" = "-l" ]; then
+		
+		if [ -d "$2" ]; then	
+
+			PWLD=`realpath "$2"`; # zjistim abs path k cilove slozce
+			EDITOVANE=`grep -o -P "$PWLD.[^/]*(?=\|[0-9]{4})" "$wedirc" | sort | uniq | grep -o "[^/]*$"`;
+		
+			if [ -z "$EDITOVANE" ]; then # pokud v cilovem adresari nebyly editovany jeste zadne soubory => chyba
+				echo "V cilovem adresari doposud zadne soubory nebyly editovany" >&2;
+				exit 1;
+			else	# pokud byly, budou zobrazeny	
+			
+				echo "$EDITOVANE"
+				exit 0;
+			fi
+		else
+			echo "Druhy argument neni slozka" >&2;
+		fi
+	
+	elif [ "$1" = "-a" ]; then
+
+		DATUM="$2"; 
+
+		if [ "`date '+%Y-%m-%d' -d "$DATUM"`" = "$DATUM" ]; then
+			
+			CDATUM=`echo "$DATUM" | sed "s/-//g"`; # odstraneni -, prevod data na cislo
+			APWD=`realpath "./"`; #zjistim realpath pwd
+			EDITED=`grep -o -P "$APWD.[^/]*\|[0-9]{4}-[0-9]{2}-[0-9]{2}$" "$wedirc" | sort | uniq`; # natahne z wedirc potrebne info
+			
+				echo "$EDITED" | while IFS= read -r line # porovnavaci cyklus
+				do
+				   	SAVED=`echo "$line" | grep -o -P "$APWD.[^/]*(?=\|[0-9]{4})" | grep -o "[^/]*$"` #	jmeno souboru			  	
+				   			   
+				   	DATUMCISLO=`echo "$line" | grep -o -P "[0-9]{4}-[0-9]{2}-[0-9]{2}$" | sed "s/-//g"` # datum jako cislo
+						
+		
+				   	if [ "$((CDATUM))" -lt "$((DATUMCISLO))" ] || [ "$((CDATUM))" -eq "$((DATUMCISLO))" ]; then # pokud je datum vetsi nebo rovno
+				  	
+				  		if [ "$DUPLCHECK" != "$SAVED" ]; then # pokud se soucasny radek nerovna predchazejicimu, bude vytisten
+				  		echo "$SAVED"; 
+				  		DUPLCHECK="$SAVED";
+
+				  		fi
+					
+					fi
+
+				done
+				
+		else
+			echo "Datum je ve spatnem formatu, pouzij YYYY-MM-DD" >&2
+			exit 1;
+		fi
+
+	
+
+	elif [ "$1" = "-b" ]; then
+
+		DATUMJEDNA="$2"; 
+
+		if [ "`date '+%Y-%m-%d' -d "$DATUMJEDNA"`" = "$DATUMJEDNA" ]; then
+			
+			CDATUMJEDNA=`echo "$DATUMJEDNA" | sed "s/-//g"`; # odstraneni -, prevod data na cislo
+			APWDJEDNA=`realpath "./"`; #zjistim realpath pwd
+			EDITEDJEDNA=`grep -o -P "$APWDJEDNA.[^/]*\|[0-9]{4}-[0-9]{2}-[0-9]{2}$" "$wedirc" | sort | uniq`; # natahne z wedirc potrebne info
+			
+				echo "$EDITEDJEDNA" | while IFS= read -r line # porovnavaci cyklus
+				do
+				   	SAVEDJEDNA=`echo "$line" | grep -o -P "$APWDJEDNA.[^/]*(?=\|[0-9]{4})" | grep -o "[^/]*$"` #	jmeno souboru			  	
+				   			   
+				   	DATUMCISLOJEDNA=`echo "$line" | grep -o -P "[0-9]{4}-[0-9]{2}-[0-9]{2}$" | sed "s/-//g"` # datum jako cislo
+
+				   	if [ "$((CDATUMJEDNA))" -gt "$((DATUMCISLOJEDNA))" ]; then # pokud je datum mensi
+				  	
+				  		if [ "$DUPLCHECKJEDNA" != "$SAVEDJEDNA" ]; then # pokud se soucasny radek nerovna predchazejicimu, bude vytisten
+				  		echo "$SAVEDJEDNA"; 
+				  		DUPLCHECKJEDNA="$SAVEDJEDNA";
+
+				  		fi
+					
+					fi
+
+				done
+				
+		else
+			echo "Datum je ve spatnem formatu, pouzij YYYY-MM-DD" >&2
+			exit 1;
+		fi
+
+	fi
+
+elif [ $# -eq 3 ]; then
+
+	if [ "$1" = "-b" ]; then
+
+		DATUMDVA="$2";
+
+		if [ "`date '+%Y-%m-%d' -d "$DATUMDVA"`" = "$DATUMDVA" ]; then
+
+			if [ -d "$3" ]; then
+
+				CDATUMDVA=`echo "$DATUMDVA" | sed "s/-//g"`; # odstraneni -, prevod data na cislo
+				APWDDVA=`realpath "$3"`; #zjistim realpath k zadane slozce
+				EDITEDDVA=`grep -o -P "$APWDDVA.[^/]*\|[0-9]{4}-[0-9]{2}-[0-9]{2}$" "$wedirc" | sort | uniq`; # natahne z wedirc potrebne info
+				
+					echo "$EDITEDDVA" | while IFS= read -r line # porovnavaci cyklus
+					do
+					   	SAVEDDVA=`echo "$line" | grep -o -P "$APWDDVA.[^/]*(?=\|[0-9]{4})" | grep -o "[^/]*$"` #	jmeno souboru			  	
+					   			   
+					   	DATUMCISLODVA=`echo "$line" | grep -o -P "[0-9]{4}-[0-9]{2}-[0-9]{2}$" | sed "s/-//g"` # datum jako cislo
+
+					   	if [ "$((CDATUMDVA))" -gt "$((DATUMCISLODVA))" ]; then # pokud je datum mensi
+					  	
+					  		if [ "$DUPLCHECKDVA" != "$SAVEDDVA" ]; then # pokud se soucasny radek nerovna predchazejicimu, bude vytisten
+					  		echo "$SAVEDDVA"; 
+					  		DUPLCHECKDVA="$SAVEDDVA";
+
+					  		fi
+						
+						fi
+
+					done
+			else
+				echo "Treti argument neni nazev slozky" >&2;
+				exit 1;
+			fi
+		else
+			echo "Datum je ve spatnem formatu, pouzij YYYY-MM-DD" >&2;
+			exit 1;
+		fi
+
+	elif [ "$1" = "-a" ]; then
+		
+		DATUMTRI="$2";
+
+		if [ "`date '+%Y-%m-%d' -d "$DATUMTRI"`" = "$DATUMTRI" ]; then
+
+			if [ -d "$3" ]; then
+
+				CDATUMTRI=`echo "$DATUMTRI" | sed "s/-//g"`; # odstraneni -, prevod data na cislo
+				APWDTRI=`realpath "$3"`; #zjistim realpath k zadane slozce
+				EDITEDTRI=`grep -o -P "$APWDTRI.[^/]*\|[0-9]{4}-[0-9]{2}-[0-9]{2}$" "$wedirc" | sort | uniq`; # natahne z wedirc potrebne info
+				
+					echo "$EDITEDTRI" | while IFS= read -r line # porovnavaci cyklus
+					do
+					   	SAVEDTRI=`echo "$line" | grep -o -P "$APWDTRI.[^/]*(?=\|[0-9]{4})" | grep -o "[^/]*$"` #	jmeno souboru			  	
+					   			   
+					   	DATUMCISLOTRI=`echo "$line" | grep -o -P "[0-9]{4}-[0-9]{2}-[0-9]{2}$" | sed "s/-//g"` # datum jako cislo
+
+					   	if [ "$((CDATUMTRI))" -lt "$((DATUMCISLOTRI))" ] || [ "$((CDATUMTRI))" -eq "$((DATUMCISLOTRI))" ]; then # pokud je datum vetsi nebo rovno # pokud je datum mensi
+					  	
+					  		if [ "$DUPLCHECKTRI" != "$SAVEDTRI" ]; then # pokud se soucasny radek nerovna predchazejicimu, bude vytisten
+					  		echo "$SAVEDTRI"; 
+					  		DUPLCHECKTRI="$SAVEDTRI";
+
+					  		fi
+						
+						fi
+
+					done
+			else
+				echo "Treti argument neni nazev slozky" >&2;
+				exit 1;
+			fi
+		else
+			echo "Datum je ve spatnem formatu, pouzij YYYY-MM-DD" >&2;
+			exit 1;
+		fi
+		
+	else
+		echo "Spatny prepinac, moznosti jsou -a nebo -b" >&2;
+		exit 1;
+	fi
+
+elif [ $# -gt 3 ]; then
+	echo "Nekdo zkousi co za hlouposti to vezme :)))) (prilis mnoho argumentu, RTFM)" >&2;
+fi
+
